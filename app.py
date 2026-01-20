@@ -1,99 +1,144 @@
-import os
-import tempfile
 import streamlit as st
 import whisper
+import tempfile
+import os
+import subprocess
 
-# Make ffmpeg visible
-os.environ["PATH"] += os.pathsep + "/usr/bin"
-
-# ---------------- CONFIG ----------------
-FREE_TRIAL_SECONDS = 240  # 4 minutes
-
-PAYMENT_LINK_1 = "https://rzp.io/l/your-basic-plan"
-PAYMENT_LINK_2 = "https://rzp.io/l/your-pro-plan"
-
-# ---------------- PAGE UI ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Japanese Audio Transcription",
-    page_icon="🇯🇵",
+    page_title="Japanese Audio / Video Transcriber",
+    page_icon="🎧",
     layout="centered"
 )
 
-st.title("🇯🇵 Japanese Audio & Video Transcription")
-st.caption("Fast • Accurate • Whisper-powered")
+st.title("🎧 Japanese Audio / Video Transcriber")
 
-st.markdown("---")
+st.info(
+    "🎁 **Free Trial:** 2 audio/video uploads (up to **3 minutes each**).\n\n"
+    "After the free trial, a subscription is required."
+)
 
-# ---------------- UPLOAD ----------------
-st.subheader("📤 Upload your audio/video")
+# ---------------- SESSION STATE ----------------
+if "free_uses" not in st.session_state:
+    st.session_state.free_uses = 0
 
+MAX_FREE_USES = 2
+MAX_FREE_DURATION = 180  # seconds (3 minutes)
+
+# ---------------- LOAD MODEL ----------------
+@st.cache_resource
+def load_model():
+    return whisper.load_model("small")
+
+model = load_model()
+
+# ---------------- SHOW FREE USES LEFT ----------------
+remaining = MAX_FREE_USES - st.session_state.free_uses
+st.caption(f"🆓 Free uses remaining: {remaining if remaining > 0 else 0}")
+
+# ---------------- FILE UPLOAD ----------------
 uploaded_file = st.file_uploader(
-    "Supported formats: MP3, WAV, M4A, MP4",
+    "📤 Upload Audio or Video",
     type=["mp3", "wav", "m4a", "mp4"]
 )
 
-# ---------------- BUTTON ----------------
-transcribe_clicked = st.button("🚀 Transcribe Now")
+# ---------------- FUNCTIONS ----------------
+def get_audio_duration(file_path):
+    """Get duration using ffprobe (works on Streamlit Cloud)"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                file_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return None
 
-# ---------------- LOGIC ----------------
-if uploaded_file and transcribe_clicked:
+def show_pricing():
+    st.markdown("---")
+    st.subheader("🔓 Unlock Full Access")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp") as tmp:
-        tmp.write(uploaded_file.read())
-        temp_path = tmp.name
+    st.write("Your free trial is over. Please subscribe to continue.")
 
-    with st.spinner("🔍 Analyzing audio duration..."):
-        model = whisper.load_model("base")
-        audio = whisper.load_audio(temp_path)
-        duration = len(audio) / 16000  # seconds
+    col1, col2, col3 = st.columns(3)
 
-    st.info(f"⏱ Audio length: {int(duration)} seconds")
+    with col1:
+        st.markdown("### 🟢 Basic – ₹500")
+        st.write("Up to **10 MB** audio/video")
+        st.markdown("[👉 Subscribe Now](https://rzp.io/rzp/mLuqttIf)")
 
-    # ---------- FREE TRIAL ----------
-    if duration <= FREE_TRIAL_SECONDS:
-        st.success("🎉 Free trial applied (up to 4 minutes)")
+    with col2:
+        st.markdown("### 🔵 Standard – ₹1000")
+        st.write("**10–50 MB** audio/video")
+        st.markdown("[👉 Subscribe Now](https://rzp.io/rzp/3V33GQ1)")
 
-        with st.spinner("🧠 Transcribing..."):
+    with col3:
+        st.markdown("### 🔴 Pro – ₹2000")
+        st.write("**Above 50 MB** audio/video")
+        st.markdown("[👉 Subscribe Now](https://rzp.io/rzp/CkQNc0rq)")
+
+# ---------------- MAIN LOGIC ----------------
+if uploaded_file:
+
+    if st.session_state.free_uses >= MAX_FREE_USES:
+        st.error("🚫 Free trial exhausted.")
+        show_pricing()
+        st.stop()
+
+    if st.button("🚀 Transcribe"):
+
+        with st.spinner("⏳ Processing your file..."):
+
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(uploaded_file.read())
+                temp_path = tmp.name
+
+            duration = get_audio_duration(temp_path)
+
+            if duration is None:
+                os.remove(temp_path)
+                st.error("❌ Could not read file duration.")
+                st.stop()
+
+            if duration > MAX_FREE_DURATION:
+                os.remove(temp_path)
+                st.error("⏱️ Free trial supports files up to **3 minutes only**.")
+                show_pricing()
+                st.stop()
+
+            # ---------------- TRANSCRIPTION ----------------
             result = model.transcribe(temp_path, language="ja")
+            os.remove(temp_path)
 
-        st.subheader("📄 Transcription Result")
+        # ---------------- SUCCESS ----------------
+        st.session_state.free_uses += 1
+        remaining = MAX_FREE_USES - st.session_state.free_uses
+
+        st.success("✅ Transcription completed!")
+
+        st.markdown("### 📄 Transcription Result")
         st.text_area(
-            "Text",
+            "Japanese Text",
             result["text"],
-            height=200
+            height=300
         )
 
         st.download_button(
-            "⬇ Download Transcript",
-            result["text"],
-            file_name="transcription.txt"
+            "⬇️ Download Transcript",
+            data=result["text"],
+            file_name="transcription.txt",
+            mime="text/plain"
         )
 
-    # ---------- PAYMENT REQUIRED ----------
-    else:
-        st.warning("⚠ Audio longer than free limit")
-
-        st.markdown("### 🔐 Choose a plan to continue")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("**Basic Plan**")
-            st.markdown("✔ Up to 30 minutes")
-            st.link_button("Pay ₹99", PAYMENT_LINK_1)
-
-        with col2:
-            st.markdown("**Pro Plan**")
-            st.markdown("✔ Unlimited usage")
-            st.link_button("Pay ₹299", PAYMENT_LINK_2)
-
-        st.info(
-            "After payment, return here and re-upload the file.\n"
-            "Auto-verification can be added next."
-        )
-
-    os.remove(temp_path)
-
-# ---------------- FOOTER ----------------
-st.markdown("---")
-st.caption("Built with ❤️ using OpenAI Whisper & Streamlit")
+        if remaining > 0:
+            st.success(f"🎉 {remaining} free transcription(s) remaining.")
+        else:
+            st.warning("⚠️ This was your last free trial.")
+            show_pricing()
