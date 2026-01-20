@@ -4,6 +4,9 @@ import tempfile
 import os
 import subprocess
 
+# ================= DEV MODE (FOR YOU ONLY) =================
+DEV_MODE = os.getenv("DEV_MODE") == "true"
+
 # ================= PAGE CONFIG =================
 st.set_page_config(
     page_title="Japanese Audio / Video Transcriber",
@@ -12,6 +15,9 @@ st.set_page_config(
 )
 
 st.title("🎧 Japanese Audio / Video Transcriber")
+
+if DEV_MODE:
+    st.success("🛠 Developer Mode Enabled — Unlimited Access")
 
 # ================= FREE TRIAL INFO =================
 st.info(
@@ -29,12 +35,15 @@ if "free_uses" not in st.session_state:
     st.session_state.free_uses = 0
 
 remaining = max(0, MAX_FREE_USES - st.session_state.free_uses)
-st.caption(f"🆓 Free uses remaining: {remaining}")
 
-# ================= SUBSCRIPTION PLANS (ALWAYS VISIBLE) =================
+if not DEV_MODE:
+    st.caption(f"🆓 Free uses remaining: {remaining}")
+else:
+    st.caption("♾ Unlimited usage (Developer)")
+
+# ================= SUBSCRIPTION PLANS =================
 st.markdown("---")
 st.markdown("## 💳 Subscription Plans")
-
 st.info("You can subscribe anytime. Payment is required only after the free trial ends.")
 
 col1, col2, col3 = st.columns(3)
@@ -90,16 +99,17 @@ def get_audio_duration(file_path):
     except Exception:
         return None
 
-def show_pricing_block():
-    st.error("🚫 Free trial exhausted. Please subscribe to continue.")
-    st.stop()
+def block_if_exhausted():
+    if not DEV_MODE:
+        st.error("🚫 Free trial exhausted. Please subscribe to continue.")
+        st.stop()
 
 # ================= MAIN LOGIC =================
 if uploaded_file:
 
-    # 🚫 Block if free trial exhausted
-    if st.session_state.free_uses >= MAX_FREE_USES:
-        show_pricing_block()
+    # 🚫 Block users only (not developer)
+    if not DEV_MODE and st.session_state.free_uses >= MAX_FREE_USES:
+        block_if_exhausted()
 
     if st.button("🚀 Transcribe"):
 
@@ -115,18 +125,19 @@ if uploaded_file:
                 st.error("❌ Unable to read file duration.")
                 st.stop()
 
-            if duration > MAX_FREE_DURATION:
+            if not DEV_MODE and duration > MAX_FREE_DURATION:
                 os.remove(temp_path)
                 st.error("⏱️ Free trial supports files up to **3 minutes only**.")
-                show_pricing_block()
+                block_if_exhausted()
 
             # 🔊 TRANSCRIBE
             result = model.transcribe(temp_path, language="ja")
             os.remove(temp_path)
 
         # ✅ SUCCESS
-        st.session_state.free_uses += 1
-        remaining = max(0, MAX_FREE_USES - st.session_state.free_uses)
+        if not DEV_MODE:
+            st.session_state.free_uses += 1
+            remaining = max(0, MAX_FREE_USES - st.session_state.free_uses)
 
         st.success("✅ Transcription completed!")
 
@@ -140,7 +151,8 @@ if uploaded_file:
             mime="text/plain"
         )
 
-        if remaining > 0:
-            st.success(f"🎉 {remaining} free transcription(s) remaining.")
-        else:
-            st.warning("⚠️ Free trial completed. Please subscribe for continued access.")
+        if not DEV_MODE:
+            if remaining > 0:
+                st.success(f"🎉 {remaining} free transcription(s) remaining.")
+            else:
+                st.warning("⚠️ Free trial completed. Please subscribe for continued access.")
