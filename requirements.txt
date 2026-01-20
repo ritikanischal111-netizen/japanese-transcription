@@ -1,4 +1,4 @@
 streamlit
-openai-whisper
+faster-whisper
 torch
-
+soundfile
