@@ -157,4 +157,3 @@ if uploaded_file:
                 st.success(f"🎉 {remaining} free transcription(s) remaining.")
             else:
                 st.warning("⚠️ Free trial completed. Please subscribe for continued access.")
-
