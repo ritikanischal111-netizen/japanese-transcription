@@ -77,8 +77,9 @@ model = load_model()
 
 # ================= FILE UPLOAD =================
 uploaded_file = st.file_uploader(
-    "📤 Upload Audio or Video",
-    type=["mp3", "wav", "m4a", "mp4"]
+    "📤 Upload Audio or Video (large files supported)",
+    type=["mp3", "wav", "m4a", "mp4"],
+    accept_multiple_files=False
 )
 
 # ================= HELPERS =================
@@ -156,3 +157,4 @@ if uploaded_file:
                 st.success(f"🎉 {remaining} free transcription(s) remaining.")
             else:
                 st.warning("⚠️ Free trial completed. Please subscribe for continued access.")
+
